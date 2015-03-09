@@ -1,0 +1,10 @@
+{
+	"name" : "jwt-xp",
+	"version" : "0.0.1",
+	"dependencies" : {
+		"express" : "4.12.2",
+		"express-jwt" : "2.0.0",
+		"node-uuid" : "1.4.3",
+		"request" : "2.53.0"
+	}
+}
