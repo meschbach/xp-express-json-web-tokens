@@ -1,27 +1,43 @@
 var request = require( "request" );
 var base = "http://localhost:8000";
 
-function rest_post( resource, body, next ){
-	return request({ method: "POST", uri: base + resource, json: body }, next);
+function rest( method, resource, body, auth, next ){
+	var options = { method: method, uri: base + resource };
+	if( body ){
+		options.json = body;
+	}
+	if( auth ){
+		options.headers = {};
+		options.headers["Authorization"] = auth;
+	}
+	return request(options, next);
 }
 
-rest_post( "/token", { user: "hobbit", secret: "tolken" }, function( err, response, body ){
+function rest_post( resource, body, auth, next ){
+	return rest( "POST", resource, body, auth, next );
+}
+function rest_get( resource, auth, next ){
+	return rest( "GET", resource, undefined, auth, next );
+}
+
+var token ;
+rest_post( "/token", { user: "spy", secret: "v spy" }, token, function( err, response, body ){
 	if( err ){ return console.error( "request error: ", err.toString() ); }
 	if( response.statusCode != 200 ){
 		return console.error( "failed to get toekn", response.statusCode );
 	}
-	var token = body;
+	token = "Bearer "+ body;
 
-	request({ uri: "http://localhost:8000/flag", headers: { 'Authorization': 'Bearer ' + token } }, function( err, response, body ){
+	rest_get( "/team/blue/flag", token, function( err, res, body ){
 		if( err ) {
 			return console.error( "Error: ", err );
 		}
 
-		var code = response.statusCode;
+		var code = res.statusCode;
 		if( code == 200 ){
 			console.log( JSON.parse( body ) );
 		}else{
-			console.error( "Status: ", code ); 
+			console.error( "Status: ", code );
 		}
 	});
 });
