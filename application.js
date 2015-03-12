@@ -41,11 +41,78 @@ var users = {
 	'spy' : { secret: 'v spy', team: "red" },
 	'unicorn' : { secret: 'worth while', team: "blue" }
 }
+/*
+ * Storage Layer interface
+ */
+function user_find_by_name( id ){
+	return users[id];
+}
 
 /*
  * Options
  */
 var port = 8000;
+
+/*
+ * Token generating middleware
+ */
+function authorization_middleware( req, resp, next ){
+	var authorization = req.headers.authorization;
+	if( !authorization ){ return next(); }
+
+	var schemeAndSecret = authorization.split( " " );
+	var scheme = schemeAndSecret[0];
+	var secret = schemeAndSecret[1];
+	if( scheme == "Basic" ){
+		var decoded = new Buffer( secret, 'base64' ).toString('utf8');
+		var separator = decoded.indexOf(":");
+		if( separator == -1 ){
+			console.log( "No separator found" );
+			resp.statusCode = 401;
+			return resp.end();
+		}
+
+		var alias = decoded.substring( 0, separator );
+		var secret = decoded.substring( separator + 1 );
+		var user = user_find_by_name( alias );
+		if( !user || user.secret != secret ){
+			resp.statusCode = 401;
+			return resp.end();
+		}
+
+		req.user = user;
+		req.user.name = alias;
+		return move_on();
+	}else if( scheme == "Bearer" ){
+		jwt.verify( secret, jwtSigningSecret, function( error, decoded ){
+			if( error ){
+				console.log( "JWT error: ", error );
+				resp.statusCode = 401;
+				resp.end();
+			}
+
+			var user = user_find_by_name( decoded.name );
+			req.user = user;
+			req.user.name = decoded.name;
+			move_on();
+		});
+	}else{
+		resp.statusCode = 401;
+		return resp.end();
+	}
+
+	function move_on(){
+		if( req.headers['jwt-token'] == "please" ){
+			var payload = {
+				name: req.user.name
+			};
+
+			var token = jwt.sign( payload, jwtSigningSecret.toString() );
+			resp.setHeader("JWT-Token", token);
+		}
+		next();
+	}
+}
 
 /*
  * Express application assembly
@@ -56,7 +123,7 @@ app.use( morgan( "short" ) );
 /*
  * Token Generation
  */
-app.post( "/token", bodyParser.json(), function( request, response ){
+app.post( "/token", authorization_middleware, bodyParser.json(), function( request, response ){
 	var errors = [];
 	var body = request.body, user, secret;
 	if( !body ){ errors.push( "body required" ); } else {
@@ -86,21 +153,6 @@ app.post( "/token", bodyParser.json(), function( request, response ){
 /*
  * Middleware
  */
-function locateUser( request, response, next ){
-	/*
-	 * Ensure we have a user
-	 */
-	var userName = request.user.name;
-	var userEntity = users[ userName ];
-	if( !userEntity ){
-		response.statusCode = 401;
-		return response.end();
-	}
-
-	request.user = userEntity;
-	next();
-}
-
 function locateTeam( request, response, next ){
 	/*
 	 * Ensure the team exists
@@ -119,8 +171,8 @@ function locateTeam( request, response, next ){
  * Protected routes
  */
 var jwt_middleware = express_jwt({ secret: jwtSigningSecret.toString() });
-app.get( "/team/:team/flag", jwt_middleware, locateUser, locateTeam, function( request, response ){
-	if( request.user.team != request.params.team ){
+app.get( "/team/:team/flag", authorization_middleware, locateTeam, function( request, response ){
+	if( !request.user || request.user.team != request.params.team ){
 		response.statusCode = 403;
 		response.end();
 	}else{

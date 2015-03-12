@@ -24,6 +24,10 @@ function rest( method, resource, body, auth, next ){
 	if( auth ){
 		options.headers = {};
 		options.headers["Authorization"] = auth;
+		var type = "Bearer ";
+		if( auth.substring( 0, type.length ) != type ){
+			options.headers["JWT-Token"] = "please";
+		}
 	}
 	return request(options, next);
 }
@@ -35,15 +39,16 @@ function rest_get( resource, auth, next ){
 	return rest( "GET", resource, undefined, auth, next );
 }
 
-var token ;
+var token = "Basic " + new Buffer( "spy" + ":" + "v spy" ).toString( "base64" );
 rest_post( "/token", { user: "spy", secret: "v spy" }, token, function( err, response, body ){
 	if( err ){ return console.error( "request error: ", err.toString() ); }
 	if( response.statusCode != 200 ){
 		return console.error( "failed to get toekn", response.statusCode );
 	}
-	token = "Bearer "+ body;
+	var token = response.headers['jwt-token'];
+	token = "Bearer "+ token;
 
-	rest_get( "/team/blue/flag", token, function( err, res, body ){
+	rest_get( "/team/red/flag", token, function( err, res, body ){
 		if( err ) {
 			return console.error( "Error: ", err );
 		}
